@@ -1,8 +1,9 @@
-// uniform samplers
+// uniform
+//		samplers
 uniform sampler2D gcolor;
 uniform sampler2D gnormal;
 uniform sampler2D gdepth;
-
+//		float
 uniform float rainStrength;
 
 // definitions just for convinient(?)
@@ -34,15 +35,15 @@ vec3 cloudCol[7] = vec3[7]( // cloud albedo, only used when cloud rendering is e
 
 #define LENG 6 // must be (SkyCol.length - 1)
 
-vec3 getAlbedo(in vec2 coord){
+vec3 getAlbedo(in vec2 coord){ // get albedo
   return texture2D(gcolor, coord).rgb;
 }
 
-vec3 getNormal(in vec2 coord){
+vec3 getNormal(in vec2 coord){ // get normal
   return texture2D(gnormal, coord).rgb * 2.0 - 1.0;
 }
 
-float getEmission(in vec2 coord){
+float getEmission(in vec2 coord){ // whether a object will be affected by lighting
   return texture2D(gdepth, coord).a;
 }
 

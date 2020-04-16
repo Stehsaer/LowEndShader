@@ -7,24 +7,23 @@
 
 #include "/lib/frameBuffer.glsl"
 
-#define SHADOWS
-  const int shadowMapResolution       = 2048; // shadowMapResolution [512 1024 1536 2048 3072 4096 6144 8192]
-  const float sunPathRotation         = -30.0; // sunPathAngles [-0.0 -5.0 -10.0 -15.0 -20.0 -25.0 -30.0 -35.0 -40.0 -45.0 -50.0 -55.0 -60.0]
-  const float shadowDistance          = 90.0; //[32.0 50.0 64.0 72.0 90.0 128.0 256.0 384.0 512.0 1024.0]
-  const float shadowBias 		          = 1.0 - 25.6 / shadowDistance;
-  const float shadowDistanceRenderMul = 1f; // enables optimization of optifine (that's what optifine supposed to do)
-
-  //const int R8 = 0;
-  //const int colortex4Format = R8; ---- unused colortex4
-
-#define SHADOW_MAP_BIAS 0.6 // not an optimization
-
-// options
-#define MULTIPLE_SHADOW // multiple shadow sampling, lowers performance
-#define CLOUDS // cloud rendering, default on
-
+const int shadowMapResolution       = 2048; // [512 1024 1536 2048 3072 4096 6144 8192]
+const float sunPathRotation         = -30.0; // [-0.0 -5.0 -10.0 -15.0 -20.0 -25.0 -30.0 -35.0 -40.0 -45.0 -50.0 -55.0 -60.0]
+const float shadowDistance          = 90.0; // [32.0 50.0 64.0 72.0 90.0 128.0 256.0 384.0 512.0 1024.0 2048.0]
+const float shadowBias 		          = 1.0 - 25.6 / shadowDistance; // what's this?
+const float shadowDistanceRenderMul = 1f; // enables optimization of optifine (that's what optifine supposed to do)
 const int RGBA16 = 1;
 const int GCOLORFORMAT = RGBA16; // formats
+//const int R8 = 0;
+//const int colortex4Format = R8; ---- unused colortex4
+
+// #define region
+#define SHADOW_MAP_BIAS 0.6 // not an option
+// 	options
+#define MULTIPLE_SHADOW 		// multiple shadow sampling, lowers performance
+#define SHADOWS 						// shadow rendering
+#define CLOUDS 							// cloud rendering, default on
+#define CLOUD_HEIGHT 512.0 	// cloud height. planning to be changable in the futures
 
 // varyings vectors
 varying vec4 texcoord;
@@ -108,23 +107,23 @@ vec3 getShadowSpacePosition(in vec2 coord){
 // main function to get if shadow visible
 float getCasterVisibility(in vec2 coord){  // change: merged all function can save GPU Cycles?
   float depth = getDepth(coord);
-  vec4 positionNdcSpace = vec4(coord.s * 2.0 - 1.0, coord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0);
-  vec4 positionCameraSpace = gbufferProjectionInverse * positionNdcSpace;
-  positionCameraSpace = positionCameraSpace / positionCameraSpace.w; //getCameraSpacePosition(coord);
+
+  vec4 positionNdcSpace 		= vec4(coord.s * 2.0 - 1.0, coord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0);
+  vec4 positionCameraSpace 	= gbufferProjectionInverse * positionNdcSpace;
+  positionCameraSpace 			= positionCameraSpace / positionCameraSpace.w; //ORIGIN:getCameraSpacePosition(coord);
 
   vec4 positionWorldSpace = gbufferModelViewInverse * positionCameraSpace;
 
   //positionWorldSpace.xyz = cameraPosition;
-
   //positionWorldSpace.xyz -= cameraPosition;
 
-  vec4 positionShadowSpace = shadowModelView * positionWorldSpace;
-  positionShadowSpace = shadowProjection * positionShadowSpace;
-  float distb = sqrt(positionShadowSpace.x * positionShadowSpace.x + positionShadowSpace.y * positionShadowSpace.y);
-  float distortFactor = (1.0 - SHADOW_MAP_BIAS) + distb * SHADOW_MAP_BIAS;
-  positionShadowSpace.xy /= distortFactor;
-  positionShadowSpace /= positionShadowSpace.w;
-  vec3 shadowCoord =  positionShadowSpace.xyz = positionShadowSpace.xyz * 0.5 + 0.5;
+  vec4 positionShadowSpace 	= shadowModelView * positionWorldSpace;
+  positionShadowSpace 			= shadowProjection * positionShadowSpace;
+  float distb 							= sqrt(positionShadowSpace.x * positionShadowSpace.x + positionShadowSpace.y * positionShadowSpace.y);
+  float distortFactor 			= (1.0 - SHADOW_MAP_BIAS) + distb * SHADOW_MAP_BIAS;
+  positionShadowSpace.xy 		/= distortFactor;
+  positionShadowSpace 			/= positionShadowSpace.w;
+  vec3 shadowCoord 					= positionShadowSpace.xyz = positionShadowSpace.xyz * 0.5 + 0.5;
 
   //vec3 shadowCoord = getShadowSpacePosition(coord);
 
@@ -162,7 +161,7 @@ Fragment getFragment(in vec2 coord){
 Lightmap getLightMap(in vec2 coord){
   Lightmap lightmap;
   lightmap.torchLightStrength = getTorchLight(coord);
-  lightmap.skyLightStrength = getSkyLight(coord);
+  lightmap.skyLightStrength 	= getSkyLight(coord);
   return lightmap;
 }
 
@@ -171,12 +170,12 @@ vec3 calculateLighting(in Fragment frag, in Lightmap lightmap){ // main light ca
   directLightStrength = max(0.0, directLightStrength); // prevents getting under 0
   vec3 directLight = vec3(directLightStrength) * lightmap.skyLightStrength / 256.0 * (1.0 - rainStrength); // mix light strength and rain effects
 
-  #ifdef SHADOWS // IS THERE SHADOWS (TROLL FACE)
+  #ifdef SHADOWS
   directLight *= lightColor * getCasterVisibility(texcoord.st);
-  #endif // YES OF COURSE
+  #endif
 
   vec3 torchColor = vec3(1.0, 0.867, 0.6); // user defined torchColor
-  vec3 torchLight = torchColor * lightmap.torchLightStrength / 256.0;
+  vec3 torchLight = torchColor * lightmap.torchLightStrength / 256.0; // calculate actual lighting
 
   vec3 lit_color = frag.albedo * (torchLight * 0.7 + directLight + skyColor); // color mixing
 
@@ -184,20 +183,17 @@ vec3 calculateLighting(in Fragment frag, in Lightmap lightmap){ // main light ca
 
   return mix(lit_color, frag.albedo, frag.emission); // returns value
 }
-
 //lighting code end
 
 //cloud render code
-#define CLOUD_HEIGHT 512.0 // cloud height. planning to be changable in the future
-
 float noise(in vec3 x){ // inner function in "getCloudNOise(in vec3 worldPos)"
     vec3 p = ceil(x);
     vec3 f = fract(x);
     f = smoothstep(0.0, 1.0, f);
 
-    vec2 uv = (p.xy+vec2(90.0, 17.0)*p.z) + f.xy;
-    float v1 = texture2D( noisetex, (uv)/256.0, -100.0 ).x;
-    float v2 = texture2D( noisetex, (uv + vec2(90.0, 17.0))/256.0, -100.0 ).x;
+    vec2 uv 	= (p.xy + vec2(90.0, 17.0) * p.z) + f.xy;
+    float v1 	= texture2D(noisetex, uv / 256.0, -100.0 ).x;
+    float v2 	= texture2D(noisetex, (uv + vec2(90.0, 17.0)) / 256.0, -100.0 ).x;
     return mix(v1, v2, f.z);
 }
 
@@ -245,7 +241,6 @@ vec3 getCloud(in vec3 color, in vec3 rayDir){ // main cloud rendering
 
   return mix(color, cloudColor, min(alpha * 8.0, 1.0)); // mixes all the colors together and returns it
 }
-
 // cloud rendering end
 
 float linearizeDepth(in float depth) { //linearize depth from screen space depth
@@ -258,20 +253,21 @@ vec3 waterReflection(in vec3 color, in vec3 normal, in vec3 viewPos){ //developi
 }
 
 void main(){ // main void
-  float depth = texture2D(depthtex1, texcoord.st).x;
-  Fragment fragd = getFragment(texcoord.st);
+  // init global variables
+  float depth       = texture2D(depthtex1, texcoord.st).x;
+  Fragment fragd    = getFragment(texcoord.st);
   Lightmap lightmap = getLightMap(texcoord.st);
+  float terrain     = getTerrain(texcoord.st);
+
   vec3 finalColor = calculateLighting(fragd, lightmap); // calculates Shadow and lightings
-  float terrain = getTerrain(texcoord.st);
 
   // eye space and world space calculations
-  vec4 viewPosition = gbufferProjectionInverse * vec4(texcoord.s * 2.0 - 1.0, texcoord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0f);
-  viewPosition /= viewPosition.w;
-  vec3 rayDir = normalize(gbufferModelViewInverse * viewPosition).xyz; //init draw cloud
+  vec4 viewPosition = gbufferProjectionInverse * vec4(texcoord.s * 2.0 - 1.0, texcoord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0f); viewPosition /= viewPosition.w;
+	vec3 rayDir = normalize(gbufferModelViewInverse * viewPosition).xyz;
 
   //if(terrain == 1.0) finalColor = voidColor / 256.0; // fix white-color void (unused)
 
-  if(terrain == 1.0 && rayDir.y > 0.0){ // deal with void problems
+  if(terrain == 1.0 && rayDir.y > 0.0){ // fix void problems
     if(worldTime >= 13800 && worldTime < 22200){ // above horizon: stars
       finalColor = vec3(1.0);
     }
@@ -280,7 +276,7 @@ void main(){ // main void
     }
   }
 
-  if(terrain == 0.3) finalColor = vec3(0.0,0.0,0.0); //test code(?)
+  if(terrain == 0.3) finalColor = vec3(0.0, 0.0, 0.0); //test code(?)
 
   #ifdef CLOUDS
   if(rayDir.y > 0.1 && terrain == 0.5)
@@ -302,6 +298,6 @@ void main(){ // main void
   vec3 highlight = finalColor.rgb * max(brightness - 0.25, 0.0);
 
 /* DRAWBUFFERS:01 */
-  gl_FragData[0] = vec4(finalColor,1.0);
+  gl_FragData[0] = vec4(finalColor, 1.0);
   gl_FragData[1] = vec4(highlight, 1.0); // pass down highlights
 }

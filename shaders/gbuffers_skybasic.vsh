@@ -9,5 +9,5 @@ uniform int worldTime;
 void main(){
   gl_Position = ftransform();
 
-  tintColor = getSkyColor(worldTime);
+  tintColor = getSkyColor(worldTime); // pass sky color down
 }

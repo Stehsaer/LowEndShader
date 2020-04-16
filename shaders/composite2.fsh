@@ -2,12 +2,15 @@
 
 // BLOOM composite 2
 
+// uniform(s)
 uniform sampler2D colortex3;
 uniform float viewWidth;
 uniform float viewHeight;
 
+// varying
 varying vec4 texcoord;
 
+// constant(s)
 const float offset[9] = float[] (0.0, 1.4896, 3.4757, 5.4619, 7.4482, 9.4345, 11.421, 13.4075, 15.3941);
 const float weight[9] = float[] (0.066812, 0.129101, 0.112504, 0.08782, 0.061406, 0.03846, 0.021577, 0.010843, 0.004881);
 

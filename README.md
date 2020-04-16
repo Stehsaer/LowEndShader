@@ -6,5 +6,5 @@ Contact me: Stehsaer@outlook.com
 # Features
 I don't expect any special FEATURES. I just don't want BUGS (a dream for everyone)
 
-# Progress
-I've been working to create a fine-looking water reflection and light shafts
+# Recent Plans
+Light shafts and water reflections (without SSR)

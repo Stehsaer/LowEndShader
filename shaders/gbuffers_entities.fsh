@@ -2,13 +2,13 @@
 
 #include "/lib/frameBuffer.glsl"
 
+// varying
 varying vec3 tintColor;
 varying vec4 texcoord;
 varying vec3 normal;
 varying vec4 lmcoord;
 
-const int noiseTextureResolution = 64;
-
+// uniform(s)
 uniform sampler2D texture;
 uniform vec4 entityColor;
 

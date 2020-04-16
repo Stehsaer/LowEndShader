@@ -12,7 +12,7 @@ const int noiseTextureResolution = 256;
 uniform sampler2D texture;
 
 void main(){
-  vec4 blockColor = texture2D(texture, texcoord.st);
+  vec4 blockColor = texture2D(texture, texcoord.st); // basically the same
   blockColor.rgb *= tintColor;
 
   GCOLOROUT = blockColor;

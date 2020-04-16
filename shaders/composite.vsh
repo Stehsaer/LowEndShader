@@ -1,9 +1,11 @@
 #version 120
 
+// uniforms
 uniform int worldTime;
 uniform vec3 sunPosition;
 uniform vec3 moonPosition;
 
+//varyings
 varying vec4 texcoord;
 varying vec3 lightVector;
 varying vec3 lightColor;
@@ -38,6 +40,8 @@ void main(){
     lightVector = normalize(sunPosition);
     skyColor = vec3(0.3 - 0.2 * (worldTime - 12000f) / 1800f);
   }
-  voidColor = getSkyColor(worldTime);
-  cloudColor = getCloudColor(worldTime) / 256.0;
+
+	// customized variable pass-downs
+  voidColor = getSkyColor(worldTime); // pass down void Colors to fsh
+  cloudColor = getCloudColor(worldTime) / 256.0; // pass down cloud color to fsh
 }
