@@ -1,5 +1,7 @@
 #version 120
 
+// gbuffers_water is supposed to render entities with transparent layers
+
 attribute vec4 mc_Entity;
 
 varying vec4 color;
@@ -12,10 +14,11 @@ varying vec4 colorOverlay;
 void main(){
   float blockId = mc_Entity.x;
   gl_Position = ftransform();
-  if(blockId == 8 || blockId == 9) {
+
+  if(blockId == 8 || blockId == 9) {  // water
     ide = 0.8;
     colorOverlay = vec4(67, 120, 224, 60);
-  } else {
+  } else { // everything else
     ide = 0.0;
     colorOverlay = vec4(1.0);
   }
@@ -23,5 +26,5 @@ void main(){
   color = gl_Color;
   texcoord = gl_MultiTexCoord0;
   lmcoord = gl_MultiTexCoord1;
-  normal = normalize(gl_NormalMatrix * gl_Normal);
+  normal = normalize(gl_NormalMatrix * gl_Normal); // normal returns
 }

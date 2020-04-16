@@ -1,5 +1,7 @@
 #version 120
 
+// BLOOM composite 1
+
 const int RGB8 = 0;
 const int colortex3Format = RGB8;
 

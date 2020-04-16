@@ -1,5 +1,7 @@
 #version 120
 
+// fix textured sky elements
+
 uniform sampler2D texture;
 
 varying vec4 color;
