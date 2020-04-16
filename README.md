@@ -4,7 +4,7 @@ However even with this I am approaching the limit of my computer. It is running 
 Contact me: Stehsaer@outlook.com
 
 # Features
-I don't expect that it has any special FEATURES instead of BUGS.
+I don't expect any special FEATURES. I just don't want BUGS (a dream for everyone)
 
 # Progress
 I've been working to create a fine-looking water reflection and light shafts
