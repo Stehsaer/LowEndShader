@@ -1,5 +1,7 @@
 #version 120
 
+// render the sky colors
+
 varying vec3 tintColor;
 
 #include "/lib/frameBuffer.glsl"

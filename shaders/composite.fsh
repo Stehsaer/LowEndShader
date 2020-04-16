@@ -1,5 +1,10 @@
 #version 120
 
+// FRAGDATA:
+// 0 = color texture
+// 1 = depth texture vec4( lightmap.torchlight, lightmap.skylight, identity of block, mix ratio of block)
+// 2 = normal texture
+
 #include "/lib/frameBuffer.glsl"
 
 #define SHADOWS
@@ -47,7 +52,6 @@ uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferProjection;
-
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 
@@ -67,6 +71,7 @@ float getDepth(in vec2 coord){
   return texture2D(gdepthtex, coord).r;
 }
 
+//shadow code
 vec4 getCameraSpacePosition(vec2 coord){
   float depth = getDepth(coord);
   vec4 positionNdcSpace = vec4(coord.s * 2.0 - 1.0, coord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0);
@@ -77,13 +82,13 @@ vec4 getCameraSpacePosition(vec2 coord){
 vec4 getWorldSpacePosition(in vec2 coord){
   vec4 positionCameraSpace = getCameraSpacePosition(coord);
   vec4 positionWorldSpace = gbufferModelViewInverse * positionCameraSpace;
-  //positionWorldSpace.xyz = cameraPosition;
+  //positionWorldSpace.xyz = cameraPosition; (save GPU Cycle)
   return positionWorldSpace;
 }
 
 vec3 getShadowSpacePosition(in vec2 coord){
   vec4 positionWorldSpace = getWorldSpacePosition(coord);
-  //positionWorldSpace.xyz -= cameraPosition;
+  //positionWorldSpace.xyz -= cameraPosition; (save GPU Cycle)
   vec4 positionShadowSpace = shadowModelView * positionWorldSpace;
   positionShadowSpace = shadowProjection * positionShadowSpace;
   float distb = sqrt(positionShadowSpace.x * positionShadowSpace.x + positionShadowSpace.y * positionShadowSpace.y);
@@ -93,16 +98,18 @@ vec3 getShadowSpacePosition(in vec2 coord){
   return positionShadowSpace.xyz = positionShadowSpace.xyz * 0.5 + 0.5;
 }
 
-float getCasterVisibility(in vec2 coord){
+float getCasterVisibility(in vec2 coord){  // change: merged all function can save GPU Cycles?
   float depth = getDepth(coord);
   vec4 positionNdcSpace = vec4(coord.s * 2.0 - 1.0, coord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0);
   vec4 positionCameraSpace = gbufferProjectionInverse * positionNdcSpace;
   positionCameraSpace = positionCameraSpace / positionCameraSpace.w; //getCameraSpacePosition(coord);
 
   vec4 positionWorldSpace = gbufferModelViewInverse * positionCameraSpace;
+
   //positionWorldSpace.xyz = cameraPosition;
 
   //positionWorldSpace.xyz -= cameraPosition;
+
   vec4 positionShadowSpace = shadowModelView * positionWorldSpace;
   positionShadowSpace = shadowProjection * positionShadowSpace;
   float distb = sqrt(positionShadowSpace.x * positionShadowSpace.x + positionShadowSpace.y * positionShadowSpace.y);
@@ -112,21 +119,28 @@ float getCasterVisibility(in vec2 coord){
   vec3 shadowCoord =  positionShadowSpace.xyz = positionShadowSpace.xyz * 0.5 + 0.5;
 
   //vec3 shadowCoord = getShadowSpacePosition(coord);
+
   #ifdef MULTIPLE_SHADOW
   float returnValue = 0;
-  for(float x = -0.5; x <= 0.5; x += 0.5){
+
+  for(float x = -0.5; x <= 0.5; x += 0.5){ // 3 * 3 = 9 samples, better quality
     for(float y = -0.5; y <=0.5; y += 0.5){
       float shadowMapSample = texture2D(shadow, shadowCoord.st + vec2(x, y) / shadowMapResolution).r;
       returnValue += step(shadowCoord.z - shadowMapSample, 0.0002);
     }
   }
+
   return returnValue / 9;
   #else
-  float shadowMapSample = texture2D(shadow, shadowCoord.st).r;
+
+  float shadowMapSample = texture2D(shadow, shadowCoord.st).r; // single sample, better performance
   return step(shadowCoord.z - shadowMapSample, 0.0002);
+
   #endif
 }
+//shadow code end
 
+//calculate lighting code
 Fragment getFragment(in vec2 coord){
   Fragment newfrag;
 
@@ -160,9 +174,10 @@ vec3 calculateLighting(in Fragment frag, in Lightmap lightmap){
   return mix(lit_color, frag.albedo, frag.emission);
 }
 
-#define CLOUD_HEIGHT 512.0
+//lighting code end
 
-const float QUA_PI = 3.1415926535897932384626 / 4.0;
+//cloud render code
+#define CLOUD_HEIGHT 512.0 // cloud height
 
 float noise(in vec3 x){
     vec3 p = ceil(x);
@@ -175,7 +190,7 @@ float noise(in vec3 x){
     return mix(v1, v2, f.z);
 }
 
-float getCloudNoise(in vec3 worldPos) {
+float getCloudNoise(in vec3 worldPos) { // cloud noise
     vec3 coord = worldPos;
     coord.x += frameTimeCounter * 10.0;
     coord *= 0.002;
@@ -186,7 +201,7 @@ float getCloudNoise(in vec3 worldPos) {
     return max(n - 0.5, 0.0) * (1.0 / (1.0 - 0.5));
 }
 
-float getCloudAlpha(in vec3 color, in vec3 rayDir){
+float getCloudAlpha(in vec3 color, in vec3 rayDir){  //sep code for alpha calculating(unused)
   float alpha = 0;
   float deltaHeight = CLOUD_HEIGHT - cameraPosition.y;
   vec3 worldPos = vec3(
@@ -201,7 +216,7 @@ float getCloudAlpha(in vec3 color, in vec3 rayDir){
   return alpha;
 }
 
-vec3 getCloud(in vec3 color, in vec3 rayDir){
+vec3 getCloud(in vec3 color, in vec3 rayDir){ // main cloud rendering
   float alpha = 0;
   float deltaHeight = CLOUD_HEIGHT - cameraPosition.y;
   vec3 worldPos = vec3(
@@ -216,16 +231,18 @@ vec3 getCloud(in vec3 color, in vec3 rayDir){
   return mix(color, cloudColor, min(alpha * 8.0, 1.0));
 }
 
-float linearizeDepth(in float depth) {
+// cloud rendering end
+
+float linearizeDepth(in float depth) { //linearize depth from screen space depth
     return (2.0 * near) / (far + near - depth * (far - near));
 }
 
-vec3 waterReflection(in vec3 color, in vec3 normal, in vec3 viewPos){
+vec3 waterReflection(in vec3 color, in vec3 normal, in vec3 viewPos){ //developing
   vec3 afterRef = reflect(normalize(viewPos), normal);
   if(dot(afterRef, lightVector) > 0.99) return vec3(1.0); else return color;
 }
 
-void main(){
+void main(){ // main void
   float depth = texture2D(depthtex1, texcoord.st).x;
   Fragment fragd = getFragment(texcoord.st);
   Lightmap lightmap = getLightMap(texcoord.st);
@@ -238,31 +255,34 @@ void main(){
   vec3 rayDir = normalize(gbufferModelViewInverse * viewPosition).xyz; //init draw cloud
 
   if(terrain == 1.0) finalColor = voidColor / 256.0; // fix white-color void
-  if(terrain == 1.0 && rayDir.y > 0.0){
-    if(worldTime >= 13800 && worldTime < 22200){
+  if(terrain == 1.0 && rayDir.y > 0.0){ // deal with void problems
+    if(worldTime >= 13800 && worldTime < 22200){ // above horizon: stars
       finalColor = vec3(1.0);
     }
-    else {
+    else { // under horizon: void
       finalColor = voidColor / 256.0;
     }
   }
-  if(terrain == 0.3) finalColor = vec3(0.0,0.0,0.0);
+
+  if(terrain == 0.3) finalColor = vec3(0.0,0.0,0.0); //test code(?)
 
   #ifdef CLOUDS
   if(rayDir.y > 0.1 && terrain == 0.5)
   finalColor = getCloud(finalColor, rayDir); //finalColor = rayDir;
   #endif
+
   if(rayDir.y > 0.0 && terrain == 0.5) finalColor *= vec3(max(1.0, 1 + (1 - rayDir.y) * 0.5));
 
-  if(abs(fragd.emission - 0.8) <= 0.01){
+  if(abs(fragd.emission - 0.8) <= 0.01){ // under development
     //finalColor = waterReflection(finalColor, fragd.normal, viewPosition.xyz);
   }
 
   //finalColor = vec3(linearizeDepth(depth));
-  if(terrain == 0.0) finalColor = mix(finalColor, voidColor / 256.0, clamp(linearizeDepth(depth) * 10 - 6, 0.0, 1.0));
+  if(terrain == 0.0) finalColor = mix(finalColor, voidColor / 256.0, clamp(linearizeDepth(depth) * 10 - 6, 0.0, 1.0)); // fog
 
   float brightness = dot(finalColor.rgb, vec3(0.2126, 0.7152, 0.0722)); // calc BLOOM
   vec3 highlight = finalColor.rgb * max(brightness - 0.25, 0.0);
+
 /* DRAWBUFFERS:01 */
   gl_FragData[0] = vec4(finalColor,1.0);
   gl_FragData[1] = vec4(highlight, 1.0);

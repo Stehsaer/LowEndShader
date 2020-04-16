@@ -1,5 +1,8 @@
 #version 120
 
+// original final.fsh
+// for sun flares and tone mappings
+
 uniform sampler2D gcolor;
 uniform sampler2D colortex1;
 #define BLOOM

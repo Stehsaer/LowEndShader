@@ -1,5 +1,7 @@
 #version 120
 
+// BLOOM composite 2
+
 uniform sampler2D colortex3;
 uniform float viewWidth;
 uniform float viewHeight;
