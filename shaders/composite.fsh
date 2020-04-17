@@ -24,6 +24,7 @@ const int GCOLORFORMAT = RGBA16; // formats
 #define SHADOWS 						// shadow rendering
 #define CLOUDS 							// cloud rendering, default on
 #define CLOUD_HEIGHT 512.0 	// cloud height. planning to be changable in the futures
+#define AUTO_EXPOSURE 			// auto exposure
 
 // varyings vectors
 varying vec4 texcoord;
@@ -36,6 +37,7 @@ varying vec3 cloudColor;
 // uniforms
 //    vec3
 uniform vec3 cameraPosition;
+uniform vec3 sunPosition;
 //    float
 uniform float frameTimeCounter;
 uniform float near;
@@ -57,6 +59,8 @@ uniform mat4 gbufferModelView;
 uniform mat4 gbufferProjection;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
+//		ivec2
+uniform ivec2 eyeBrightnessSmooth;
 
 // custom structures
 struct Fragment{
@@ -128,27 +132,25 @@ float getCasterVisibility(in vec2 coord){  // change: merged all function can sa
   //vec3 shadowCoord = getShadowSpacePosition(coord);
 
   #ifdef MULTIPLE_SHADOW // multiple shadow sampling, creates a smoothed edge for lowResShadows
-  float returnValue = 0;
-
-  for(float x = -0.5; x <= 0.5; x += 0.5){ // 3 * 3 = 9 samples, better quality
-    for(float y = -0.5; y <=0.5; y += 0.5){
-      float shadowMapSample = texture2D(shadow, shadowCoord.st + vec2(x, y) / shadowMapResolution).r;
-      returnValue += step(shadowCoord.z - shadowMapSample, 0.0002);
-    }
-  }
-
-  return returnValue / 9;
+  	float returnValue = 0;
+  	for(float x = -0.5; x <= 0.5; x += 0.5){ // 3 * 3 = 9 samples, better quality
+    	for(float y = -0.5; y <=0.5; y += 0.5){
+      	float shadowMapSample = texture2D(shadow, shadowCoord.st + vec2(x, y) / shadowMapResolution).r;
+      	returnValue += step(shadowCoord.z - shadowMapSample, 0.0002);
+    	}
+  	}
+  	return returnValue / 9;
   #else
-  // single sample, better performance
-  float shadowMapSample = texture2D(shadow, shadowCoord.st).r;
-  return step(shadowCoord.z - shadowMapSample, 0.0002);
-
+  	// single sample, better performance
+  	float shadowMapSample = texture2D(shadow, shadowCoord.st).r;
+  	return step(shadowCoord.z - shadowMapSample, 0.0002);
   #endif
 }
 //shadow code end
 
 //calculate lighting code
 Fragment getFragment(in vec2 coord){
+	// init a "Fragment" structure
   Fragment newfrag;
 
   newfrag.albedo   = getAlbedo(coord);
@@ -181,6 +183,7 @@ vec3 calculateLighting(in Fragment frag, in Lightmap lightmap){ // main light ca
 
   if(isEyeInWater == 1) lit_color *= vec3(0.5, 0.5, 1.0); // water effects, may be way too much
 
+  if(abs(frag.emission - 0.8) < 0.01) return lit_color;
   return mix(lit_color, frag.albedo, frag.emission); // returns value
 }
 //lighting code end
@@ -208,19 +211,8 @@ float getCloudNoise(in vec3 worldPos) { // cloud noise, from http://blog.hakugyo
     return max(n - 0.5, 0.0) * (1.0 / (1.0 - 0.5));
 }
 
-float getCloudAlpha(in vec3 color, in vec3 rayDir){  //sep code for alpha calculating(unused)
-  float alpha = 0;
-  float deltaHeight = CLOUD_HEIGHT - cameraPosition.y;
-  vec3 worldPos = vec3(
-    cameraPosition.x + rayDir.x / rayDir.y * deltaHeight,
-    CLOUD_HEIGHT,
-    cameraPosition.z + rayDir.z / rayDir.y * deltaHeight
-    );
-  alpha = getCloudNoise(worldPos);
-  if(rayDir.y <= 0.2){
-    alpha *= max(0.0, (rayDir.y - 0.1) * 10);
-  }
-  return alpha;
+float getCloudAlpha(in vec3 worldPos){  //sep code for alpha calculating(unused)
+  return getCloudNoise(worldPos);
 }
 
 vec3 getCloud(in vec3 color, in vec3 rayDir){ // main cloud rendering
@@ -247,14 +239,18 @@ float linearizeDepth(in float depth) { //linearize depth from screen space depth
     return (2.0 * near) / (far + near - depth * (far - near));
 }
 
-vec3 waterReflection(in vec3 color, in vec3 normal, in vec3 viewPos){ //developing
-  vec3 afterRef = reflect(normalize(viewPos), normal);
-  if(dot(afterRef, lightVector) > 0.99) return vec3(1.0); else return color;
+vec3 waterReflection(in vec3 color, in vec3 normal, in vec3 rayDir, in vec3 worldPosition){ //developing
+	//vec3 afterRef = reflect(rayDir, normal) + vec3(noise(worldPosition * 5.0 + vec3(frameTimeCounter, frameTimeCounter / 2, 0.0)), noise(worldPosition * 5.0 + vec3(frameTimeCounter, frameTimeCounter / 2, frameTimeCounter / 4)), noise(worldPosition * 5.0 + vec3(0.0, -frameTimeCounter, frameTimeCounter))) * 2;
+	//float fresnel = 0.02 + 0.98 * pow(1.0 - dot(normalize(rayDir), normalize(afterRef)), 5.0);
+	//vec3 backgroundColor = vec3(dot(normalize(afterRef), normalize(lightVector)));
+  //return mix(color * 0.33, voidColor / 256.0, clamp(1 - fresnel, 0.0, 1.0));
+	//return backgroundColor;
+	return color * (0.5 + noise(worldPosition * 5.0 + vec3(frameTimeCounter, frameTimeCounter / 2, 0.0)) * noise(worldPosition * 5.0 + vec3(frameTimeCounter, frameTimeCounter / 2, frameTimeCounter / 4)) * noise(worldPosition * 5.0 + vec3(0.0, -frameTimeCounter, frameTimeCounter)));
 }
 
 void main(){ // main void
   // init global variables
-  float depth       = texture2D(depthtex1, texcoord.st).x;
+  float depth       = texture2D(depthtex0, texcoord.st).x;
   Fragment fragd    = getFragment(texcoord.st);
   Lightmap lightmap = getLightMap(texcoord.st);
   float terrain     = getTerrain(texcoord.st);
@@ -264,34 +260,51 @@ void main(){ // main void
   // eye space and world space calculations
   vec4 viewPosition = gbufferProjectionInverse * vec4(texcoord.s * 2.0 - 1.0, texcoord.t * 2.0 - 1.0, 2.0 * depth - 1.0, 1.0f); viewPosition /= viewPosition.w;
 	vec3 rayDir = normalize(gbufferModelViewInverse * viewPosition).xyz;
+	vec4 worldPositionEyeSpace = gbufferModelViewInverse * viewPosition; worldPositionEyeSpace /= worldPositionEyeSpace.w;
+	vec3 worldPosition = cameraPosition + worldPositionEyeSpace.xyz;
 
   //if(terrain == 1.0) finalColor = voidColor / 256.0; // fix white-color void (unused)
 
-  if(terrain == 1.0 && rayDir.y > 0.0){ // fix void problems
-    if(worldTime >= 13800 && worldTime < 22200){ // above horizon: stars
-      finalColor = vec3(1.0);
-    }
-    else { // under horizon: void
-      finalColor = voidColor / 256.0;
-    }
+  if(terrain == 1.0){ // fix void problems
+		if(rayDir.y > -0.3){
+    	if(worldTime >= 13800 && worldTime < 22200){
+				// night:bright!
+      	finalColor = vec3(1.0);
+    	}
+    	else {
+				// day:not display
+      	finalColor = voidColor / 256.0;
+    	}
+		}
+		else{
+			// void
+			finalColor = voidColor / 256.0;
+		}
   }
 
   if(terrain == 0.3) finalColor = vec3(0.0, 0.0, 0.0); //test code(?)
 
   #ifdef CLOUDS
-  if(rayDir.y > 0.1 && terrain == 0.5)
-  finalColor = getCloud(finalColor, rayDir); //finalColor = rayDir;
+  	if(rayDir.y > 0.1 && terrain == 0.5) finalColor = getCloud(finalColor, rayDir); // render clouds. NOTE:Is there a way to render volumetric clouds without hitting the performance too much?
   #endif
 
   // in the sky, colors get brighter when getting closer to the horizon
-  if(rayDir.y > 0.0 && terrain == 0.5) finalColor *= vec3(max(1.0, 1 + (1 - rayDir.y) * 0.5));
+  if(rayDir.y > -0.8 && (terrain == 0.5 || terrain == 1.0) ) finalColor *= vec3(max(1.0, 1 + (1 - rayDir.y) * 0.5));
 
-  if(abs(fragd.emission - 0.8) <= 0.01){ // under development
-    //finalColor = waterReflection(finalColor, fragd.normal, viewPosition.xyz);
+  // water reflection. STATUS: UNDER DEVELOPMENT
+  vec4 actualNormal = gbufferModelViewInverse * vec4(fragd.normal, 1.0); actualNormal /= actualNormal.w;
+  if(abs(fragd.emission - 0.8) <= 0.01 && actualNormal.y >= 0.9){
+		finalColor = waterReflection(finalColor, normalize(fragd.normal), normalize(viewPosition.xyz), worldPosition);
   }
 
-  //finalColor = vec3(linearizeDepth(depth));
-  if(terrain == 0.0) finalColor = mix(finalColor, voidColor / 256.0, clamp(linearizeDepth(depth) * 10 - 6, 0.0, 1.0)); // fog
+	#ifdef AUTO_EXPOSURE
+  	// Auto Exposure
+  	float actualBrightness = float(max(eyeBrightnessSmooth.x * 0.85, eyeBrightnessSmooth.y * lightColor.x)) / 240.0;
+		finalColor *= vec3(1.4 - actualBrightness * 0.6);
+	#endif
+
+  // fog rendering. NOTE: I cannot figure out how this linearizeDepth(in float depth) actually represents and the "* 10 - 6" are actually magic numbers. Is there a way to convert it to an actual block distance?
+  if(terrain == 0.0) finalColor = mix(finalColor, voidColor / 256.0, clamp(linearizeDepth(depth) * 10 - 6, 0.0, 1.0));
 
   // prepare for BLOOM calculations in composite1 and composite2
   float brightness = dot(finalColor.rgb, vec3(0.2126, 0.7152, 0.0722));

@@ -19,3 +19,5 @@ void main(){
   GDEPTHOUT = vec4(lmcoord.st, 0.0, 1.0);
   GNORMALOUT = vec4(normal * 0.5 + 0.5, 0.0f);
 }
+
+// BUG: a hand-held enchanted item cannot be rendered properly most of the time

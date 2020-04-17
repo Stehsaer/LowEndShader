@@ -17,3 +17,4 @@ option.BLOOM=泛光
 option.SUN_FLARE=阳光镜头滤镜
 option.TONEMAPPING=增强色调映射
 option.CLOUDS=云朵
+option.AUTO_EXPOSURE=自动曝光

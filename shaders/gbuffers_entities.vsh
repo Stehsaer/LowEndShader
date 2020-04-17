@@ -5,9 +5,14 @@ varying vec3 tintColor;
 varying vec4 texcoord;
 varying vec3 normal;
 varying vec4 lmcoord;
+varying float isHurt;
+varying float isExplode;
 
 // uniform(s)
 uniform sampler2D noisetex;
+
+uniform int entityHurt;
+uniform int entityFlash;
 
 void main(){
   gl_Position = ftransform();
@@ -18,4 +23,7 @@ void main(){
   tintColor = gl_Color.rgb;
 
   normal = normalize(gl_NormalMatrix * gl_Normal);
+
+	isHurt = float(entityHurt);
+	isExplode = float(entityFlash);
 }

@@ -1,5 +1,7 @@
 #version 120
 
+#include "/lib/frameBuffer.glsl"
+
 // uniforms
 uniform int worldTime;
 uniform vec3 sunPosition;
@@ -12,8 +14,6 @@ varying vec3 lightColor;
 varying vec3 skyColor;
 varying vec3 voidColor;
 varying vec3 cloudColor;
-
-#include "lib/frameBuffer.glsl"
 
 void main(){
   gl_Position = ftransform();
